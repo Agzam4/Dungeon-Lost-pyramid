@@ -45,6 +45,11 @@ public class Player extends GameObject {
 	boolean isGrounded;
 	
 	boolean isTouchTrap;
+
+	private double effect = 0;
+	private double effectMove = 0;
+	
+	private boolean isRight = false;
 	
 	@Override
 	public void update() {
@@ -56,8 +61,20 @@ public class Player extends GameObject {
 		boolean isLadder = isLadder();
 		updateTouch();
 		
-		if(isRIGHT) vx=speed;
-		if(isLEFT) vx=-speed;
+		double eff = 0;
+		
+		if(isRIGHT) {
+			if(!isRight || Math.round(vx) == 0)
+			effectMove=speed;
+			vx=speed;
+			isRight = true;
+		}
+		if(isLEFT) {
+			if(isRight || Math.round(vx) == 0)
+			effectMove=speed;
+			vx=-speed;
+			isRight = false;
+		}
 		
 		if(isLadder) {
 			if(isUP) vy=-speed;
@@ -98,6 +115,7 @@ public class Player extends GameObject {
 		if(intersectionX != 0) {
 			x += intersectionX;
 			vx = 0;
+			effectMove = 0;
 		}
 
 //		y += vy;
@@ -119,6 +137,9 @@ public class Player extends GameObject {
 				int intersectionY = getIntersectionY(Tile.HITBOX_WALL);
 				if(intersectionY != 0) {
 					y += intersectionY;
+					if(vy > g) {
+						effect = -vy/20;
+					}
 					vy = 0;
 					isGrounded = true;
 					break;
@@ -136,6 +157,7 @@ public class Player extends GameObject {
 				if(intersectionY != 0) {
 					y += intersectionY;
 					vy = 0;
+					eff = 0;
 					break;
 				}
 			}
@@ -149,7 +171,16 @@ public class Player extends GameObject {
 			vx = 0;
 		}
 		
+		if(effectMove > slow) {
+			effectMove-=slow;
+		}else if(effectMove < -slow) {
+			effectMove+=slow;
+		}else {
+			effectMove = 0;
+		}
+		
 		if(isLadder) {
+			eff += Math.abs(vy)/50;
 			if(vy > slow) {
 				vy-=slow;
 			}else if(vy < -slow) {
@@ -158,8 +189,19 @@ public class Player extends GameObject {
 				vy = 0;
 			}
 		}else {
+			eff += vy > 0 ? 0 : -vy/50;
 			vy += g;
 		}
+		
+		if(Math.abs(effectMove) < speed) {
+			eff += Math.abs(effectMove)/15;
+		}
+		
+		effect = (effect-eff)/2+eff;
+		
+//		int eSize = (int) (20*eff/2);
+//		hitbox.w = 20 - eSize;
+		//hitbox.h = 10 + eSize;
 	}
 	
 	private void destroyTraps() {
@@ -258,7 +300,7 @@ public class Player extends GameObject {
 		return sum;
 	}
 	
-	private int getIntersectionY(int hbType) {
+	private int getIntersectionY(int hbType) { // TODO
 		int left = (int)((x)/Tile.tilesize);
 		int right = (int)((x+getWidth())/Tile.tilesize);
 		int top = (int)((y)/Tile.tilesize);
@@ -327,7 +369,10 @@ public class Player extends GameObject {
 //		
 //		g.setColor(isTouchTrap ? Color.RED.darker() : Color.LIGHT_GRAY);
 //		g.drawRect(nx, ny, nd, nd);
-		g.drawImage(getGame().getPack().player, nx, ny, nd, nd, null);
+		
+		
+		int eff = (int) (effect*nd/2);
+		g.drawImage(getGame().getPack().player, nx + eff/2, ny - eff, nd - eff, nd + eff, null);
 	}
 
 	
@@ -358,4 +403,5 @@ public class Player extends GameObject {
 	public int getHeight() {
 		return hitbox.h;
 	}
+
 }

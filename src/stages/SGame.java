@@ -7,16 +7,22 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.RadialGradientPaint;
 import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
+import debug.Debug;
 import game.Box;
 import game.LightComposite;
 import game.Player;
 import game.Tile;
+import gameGUI.Button;
+import gameGUI.ImageButton;
 import generator.Blocks;
 import generator.LevelGenerator;
+import generator.MinimapGenerator;
 import work.Data;
 import work.Pack;
 
@@ -39,16 +45,26 @@ public class SGame extends Stage {
 	int mapCenterX, mapCenterY;
 	int mapTilesWidth, mapTilesHeight;
 	
-	Pack pack;
 	
 	int dungeonLevel;
 
 	public static float lightRadius = 2;
 	public static float effectLight = 1;
 
+	private Button gameOverMenu;
+	private Button gameOverNext;
+	
+	ImageButton minimapButton;
+
 	public SGame() {
+
+		gameOverMenu = new Button("Menu");
+		gameOverNext = new Button("Next");
+		gameOverMenu.hide();
+		gameOverNext.hide();
 		
-		dungeonLevel = 0;
+		
+		dungeonLevel = Debug.isSecretRoomTesting ? 3 : 0;
 		gameOver = null;
 		
 		player = new Player(this);
@@ -56,23 +72,22 @@ public class SGame extends Stage {
 
 		needNextDungeon = false;
 		generate();
-
-		pack = new Pack();
-		try {
-			pack.load();
-			pack.loadTileset(ImageIO.read(SGame.class.getResourceAsStream("/tileset/Dungeon_Lost_pyramid.png")));
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 		
 		blackScreenAlpha = -1;
 		effectBlackScreenAlpha = -1;
 	}
 	
+	BufferedImage minimap = null;
+	boolean isMinimpOpen = false;
+	double minimapSize = 0;
+	double minimapDark = 0;
+	
 	private void generate() {
 		LevelGenerator generator = new LevelGenerator();
 		generator.setLevel(dungeonLevel);
 		generator.generate(25 + dungeonLevel, 25 + dungeonLevel);
+		
+		minimap = MinimapGenerator.generate(generator.getMap());
 		
 		/*
 		try {
@@ -81,7 +96,7 @@ public class SGame extends Stage {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		*/
+		//*/
 		
 		width = generator.w;
 		height = generator.h;
@@ -102,10 +117,12 @@ public class SGame extends Stage {
 				tiles[x][y].setGame(this);
 			}
 		}
-		player.setPosition(mapCenterX + (Tile.tilesize - player.getHeight())/2, mapCenterY - player.getHeight());
+		player.setPosition(
+				mapCenterX - player.getHeight()/2,
+				mapCenterY - Tile.tilesize/2 - player.getHeight());
 		
 		dungeonTitleTime = 1500;
-		isSecretRoomOpened = false;
+		isSecretRoomOpened = Debug.isSecretRoomTesting;
 		
 		effectBlackScreenAlpha = -1;
 		effectLight = 1f;
@@ -120,6 +137,11 @@ public class SGame extends Stage {
 	@Override
 	public void update() {
 		timer++;
+		
+		if(getManager() != null && minimapButton == null) {
+			minimapButton = new ImageButton(getPack().minimapIco);
+		}
+		
 		if(needNextDungeon) {
 			if(blackScreenAlpha < 240) {
 				blackScreenAlpha = (blackScreenAlpha - 255)*0.85 + 255;
@@ -135,7 +157,27 @@ public class SGame extends Stage {
 			blackScreenAlpha *= 0.8;
 		}
 		
-		if(!isGameOver()) {
+		if(isGameOver()) {
+			gameOverMenu.update(getMouse());
+			gameOverNext.update(getMouse());
+
+			if(gameOverMenu.isClicked()) {
+				getManager().setStage(new SMenu());
+			}
+			
+			if(gameOverNext.isClicked()) {
+				getManager().setStage(new SGame());
+			}
+		}else {
+			if(minimapButton != null) {
+				minimapButton.update(getMouse());
+				if(minimapButton.isClicked()) {
+					isMinimpOpen = !isMinimpOpen;
+					minimapButton.clickEffect();
+					minimapButton.reclick();
+					getMouse().release();
+				}
+			}
 			player.update();
 		}
 
@@ -156,7 +198,6 @@ public class SGame extends Stage {
 			effectLight = (effectLight-0.6f)/1.5f + 0.6f;
 			effectBlackScreenAlpha = 255*Math.cos(timer/20d);
 		}
-//		System.out.println("[SGame.update()] " + tiles[26][25].getHitbox().px + " " + tiles[26][25].getHitbox().py);
 	}
 
 
@@ -188,6 +229,25 @@ public class SGame extends Stage {
 		fg.fillRect(0, 0, getPanel().getFrameW(), getPanel().getFrameH());
 	}
 	
+	private void drawSubTitle(Graphics2D fg, String title) {
+		int titleH = (int) (getPanel().scalefull*25/2);
+		fg.setFont(new Font(Font.DIALOG_INPUT, Font.PLAIN, titleH));
+		int titleW = fg.getFontMetrics().stringWidth(title);
+
+		int moveTitle = titleH/15;
+
+		int titleX = (getPanel().getFrameW()-titleW)/2;
+		int titleY = (getPanel().getFrameH()+titleH)/2;
+		fg.setColor(new Color(225,225,225, Math.min(255, dungeonTitleTime)));
+		fg.drawString(title, titleX, titleY);
+		
+		fg.setColor(new Color(50,50,50, Math.min(255, dungeonTitleTime)));
+		fg.drawString(title, titleX + moveTitle, titleY + moveTitle);
+
+		fg.setColor(new Color(0,0,0, Math.min(255, dungeonTitleTime)/5));
+		fg.fillRect(0, 0, getPanel().getFrameW(), getPanel().getFrameH());
+	}
+	
 	@Override
 	public void draw(Graphics2D g, Graphics2D fg) {
 		getPanel().clear(fg);
@@ -196,18 +256,76 @@ public class SGame extends Stage {
 			if(dungeonTitleTime < 255) {
 				dungeonTitleTime += 50;
 			}
-			drawTitle(fg, "You lose from " + gameOver);
+			
+			drawTitle(fg, "Dungeon " + dungeonLevel);
+			drawSubTitle(fg, "You lose from " + gameOver);
+
+			gameOverMenu.show();
+			gameOverNext.show();
+
+			gameOverMenu.setSize(getFrameH()/14);
+			gameOverNext.setSize(getFrameH()/14);
+			
+			gameOverMenu.setY(getFrameH() - getFrameH()/7);
+			gameOverNext.setY(getFrameH() - getFrameH()/7);
+
+			gameOverMenu.setX(getFrameW()/3*1);
+			gameOverNext.setX(getFrameW()/3*2);
+			
+			gameOverMenu.draw(fg);
+			gameOverNext.draw(fg);
 		}else {
+			if(minimapButton != null) {
+				minimapButton.show();
+				minimapButton.setSize(getFrameH()/14);
+				minimapButton.setY(minimapButton.getHeight());
+				minimapButton.setX(getFrameW() - minimapButton.getWidth());
+				minimapButton.draw(fg);
+			}
+
 			if(dungeonTitleTime > 0) {
 				dungeonTitleTime -= 50;
 				drawTitle(fg, "Dungeon " + dungeonLevel);
 			}else {
 				dungeonTitleTime = 0;
 			}
+
+			if(minimap != null) {
+				int size = Math.min(getFrameW(), getFrameH());
+				if(isMinimpOpen) {
+					minimapSize = (minimapSize-size)/2+size;
+					
+					minimapDark = (minimapDark-100)/2+100;
+					if(minimapDark > 100) minimapDark = 100;
+				}else {
+					if(minimapSize > size) {
+						minimapSize = size-6;
+					}
+					minimapSize -= (size-minimapSize/1.05);
+					if(minimapSize < 0) {
+						minimapSize = 0;
+					}
+					minimapDark -= (100-minimapDark/1.05);
+					if(minimapDark < 0) minimapDark = 0;
+				}
+				if(minimapSize > 1) {
+					fg.drawImage(minimap,
+							(int) ((getFrameW()-minimapSize)/2),
+							(int) ((getFrameH()-minimapSize)/2),
+							(int) minimapSize,
+							(int) minimapSize,
+							null);
+				}
+			}
 		}
 		
 		if(blackScreenAlpha+effectBlackScreenAlpha > 0) {
 			fg.setColor(new Color(0,0,0, (int) Math.min(255, blackScreenAlpha+effectBlackScreenAlpha)));
+			fg.fillRect(0, 0, getPanel().getFrameW(), getPanel().getFrameH());
+		}
+		
+		if(minimapDark >= 1) {
+			fg.setColor(new Color(0,0,0, (int) Math.min(255, minimapDark*2)));
 			fg.fillRect(0, 0, getPanel().getFrameW(), getPanel().getFrameH());
 		}
 		
@@ -356,7 +474,7 @@ public class SGame extends Stage {
 						drawImage(g, drawbox, Blocks.LADDER_TRAP_LEFT.ordinal(), px, py, 0, 0);
 					}else if (tile.isLadderTrap()) {
 					}else if (tile.isLadderTrapRight()) {
-						g.drawImage(pack.getTile(Blocks.LADDER_TRAP_LADDER.ordinal()),
+						g.drawImage(getPack().getTile(Blocks.LADDER_TRAP_LADDER.ordinal()),
 							(int)((drawbox.x-tile.getTrapRedzoneInt()/2+Tile.tilesize)*getQuality() + px),
 							(int)(drawbox.y*getQuality() + py),
 							(int)(-drawbox.w*getQuality()),
@@ -422,22 +540,26 @@ public class SGame extends Stage {
 						int moveX = (int) (1*Math.cos(timer/3d) * getQuality());
 						
 						/*
-						double lightSmooth = 4;
-						g.setColor(new Color(255,150,0));
+						double lightSmooth = 20;
+						g.setColor(new Color(25,15, 0));
 						for (int i = 1; i < lightSmooth; i++) {
 							int r = (int) (size*2*i/lightSmooth);
-//							g.setPaint(getFireRadialGradient(px + size/2, (int) (py + size/1.5), Tile.tilesize*2));
-//							g.fillOval(px, py+size/4, size, size);
+							//g.setPaint(getFireRadialGradient(px + size/2, (int) (py + size/1.5), Tile.tilesize*2));
+							//g.fillOval(px, py+size/4, size, size);
 							g.fillOval(px - r + size/2, (int) (py-r+size/1.5), (int)(r*2), (int)(r*2));
 						}
-						//*/
-
-//						g.setPaint(getFireRadialGradient(px + size/2, py, Tile.tilesize*2));
-//						g.fillRect(px-size*2, py-size*2, size*5, size*5);
 						
-						g.setPaint(getFireRadialGradient(px + size/2, (int) (py + size/1.5), Tile.tilesize*2 + moveX));
-						g.fillRect(px-size*2 - moveX, py-size*2 - moveX, size*5 + moveX*2, size*5 + moveX*2);
-
+						/*/
+						
+						g.setPaint(getFireRadialGradient(px + size/2, (int) (py + size/1.5), Tile.tilesize*2));
+						g.fillRect(px-size*2, py-size*2, size*5, size*5);
+						
+						//g.setPaint(getFireRadialGradient(px + size/2, (int) (py + size/1.5), Tile.tilesize*2 + moveX));
+						//g.fillRect(px-size*2 - moveX, py-size*2 - moveX, size*5 + moveX*2, size*5 + moveX*2);
+						
+						//*/
+						
+						
 						Box drawbox = tile.getDrawBox();
 						drawImage(g, drawbox, type, px, py, 0, 0);
 						moveX = (int) (2*Math.cos(timer/7d) * getQuality());
@@ -463,7 +585,7 @@ public class SGame extends Stage {
 		return new RadialGradientPaint(
 				new Point(x, y),
 				(float) (getQuality() * r),
-				new float[] { .0f, 1f},
+				new float[] { .50f, 1f},
 				new Color[] {new Color(255,150,0,0), new Color(0,0,0,0)});
 	}
 	
@@ -487,22 +609,34 @@ public class SGame extends Stage {
 	
 	
 	private void drawImage(Graphics2D g, Box drawbox, int type, int px, int py, int x, int y) {
-		g.drawImage(pack.getTile(type),
+		g.drawImage(getPack().getTile(type),
 				(int)((drawbox.x+x)*getQuality() + px),
 				(int)((drawbox.y+y)*getQuality() + py),
 				(int)(drawbox.w*getQuality()),
 				(int)(drawbox.h*getQuality()),
 				null);
 	}
+	
+	boolean isReloadMiniMapKey = true;
 
 	@Override
 	public void keyPressed(KeyEvent e) {
 		setKeys(e.getKeyCode(), true);
+
+		if(isReloadMiniMapKey) {
+			if(e.getKeyCode() == Data.control[Data.KEY_MAP]) {
+				isMinimpOpen = !isMinimpOpen;
+				isReloadMiniMapKey = false;
+			}
+		}
 	}
 
 	@Override
 	public void keyReleased(KeyEvent e) {
 		setKeys(e.getKeyCode(), false);
+		if(e.getKeyCode() == Data.control[Data.KEY_MAP]) {
+			isReloadMiniMapKey = true;
+		}
 	}
 	
 	private void setKeys(int key, boolean b) {
@@ -514,6 +648,8 @@ public class SGame extends Stage {
 			player.right(b);
 		if(key == Data.control[Data.KEY_LEFT])
 			player.left(b);
+//		if(key == Data.control[Data.KEY_LEAP])
+//			player.leap(b);
 	}
 
 	int debug$tileX, debug$tileY;
@@ -613,9 +749,9 @@ public class SGame extends Stage {
 		return gameOver != null;
 	}
 	
-	public Pack getPack() {
-		return pack;
-	}
+//	public Pack getPack() {
+//		return getManager().getPack();
+//	}
 
 	private boolean isSecretRoomOpened;
 	private boolean isSecretChestLooted;

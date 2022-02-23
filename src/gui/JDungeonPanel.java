@@ -15,12 +15,14 @@ import java.awt.event.KeyListener;
 import java.awt.image.BufferedImage;
 
 import stages.Manager;
+import work.Mouse;
 
 public class JDungeonPanel extends JPanel implements KeyListener {
 
 	private static final long serialVersionUID = -3211693771382043045L;
 
 	Manager manager;
+	Mouse mouse;
 	
 	private static long sleep = 50; // 1000 / FPS;
 	
@@ -56,6 +58,8 @@ public class JDungeonPanel extends JPanel implements KeyListener {
 	private boolean isRunning;
 	
 	public void go() {
+		mouse = new Mouse(this);
+		manager.setMouse(mouse);
 		calculateScreen();
 		
 		isRunning = true;
@@ -85,12 +89,15 @@ public class JDungeonPanel extends JPanel implements KeyListener {
 	
 	private void draw() {
 		Graphics2D panelGraphics2d = (Graphics2D) getGraphics();
+		Render.addRenderingHints(panelGraphics2d);
 		
 		Graphics2D g = (Graphics2D) game.getGraphics();
 		Graphics2D gf = (Graphics2D) gamefull.getGraphics();
 		
 		Render.addRenderingHints(g);
 		Render.addRenderingHints(gf);
+		
+		clear(gf);
 		
 		gf.setColor(new Color(0,0,0,0));
 		gf.fillRect(0, 0, frameW, frameH);
@@ -100,7 +107,7 @@ public class JDungeonPanel extends JPanel implements KeyListener {
 		Graphics2D a = (Graphics2D) all.getGraphics();
 		a.drawImage(game, gameX, gameY,
 				(int)(game.getWidth()*scale), (int) (game.getHeight()*scale), null);
-		a.drawImage(gamefull, 0, 0, null);
+		a.drawImage(gamefull, 0, 0, frameW, frameH, null);
 		a.dispose();
 		
 		panelGraphics2d.drawImage(all, 0, 0, null);
@@ -193,4 +200,9 @@ public class JDungeonPanel extends JPanel implements KeyListener {
 	public AlphaComposite getNormalComposite() {
 		return normal;
 	}
+	
+	public double getScale() {
+		return scale;
+	}
+	
 }

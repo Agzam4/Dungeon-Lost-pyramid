@@ -4,6 +4,9 @@ import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
 
 import gui.JDungeonPanel;
+import progress.ProgressData;
+import work.Mouse;
+import work.Pack;
 
 public abstract class Stage {
 
@@ -30,6 +33,14 @@ public abstract class Stage {
 		return getManager().getPanel();
 	}
 
+	public int getFrameW() {
+		return getPanel().getFrameW();
+	}
+	
+	public int getFrameH() {
+		return getPanel().getFrameH();
+	}
+
 	public int getGameWidth() {
 		return getPanel().getGameWidth();
 	}
@@ -41,6 +52,23 @@ public abstract class Stage {
 	public double getQuality() {
 		return getPanel().quality;
 	}
+	
+	public double getScale() {
+		return getPanel().getScale();
+	}
+	
+	public Pack getPack() {
+		return manager.getPack();
+	}
+	
+	public ProgressData getData() {
+		return manager.getData();
+	}
+	
+	public Mouse getMouse() {
+		return manager.getMouse();
+	}
+	
 	
 	public abstract void update();
 	public abstract void draw(Graphics2D g, Graphics2D fg);

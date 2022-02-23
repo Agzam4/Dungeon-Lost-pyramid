@@ -1,6 +1,7 @@
 package gui;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.EventQueue;
 
 import javax.swing.JFrame;
@@ -35,6 +36,7 @@ public class JDungeon extends JFrame {
 	public JDungeon() {
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setBounds(100, 100, 500, 500);
+		setMinimumSize(new Dimension(500, 500));
 		setExtendedState(MAXIMIZED_BOTH);
 		contentPane = new JDungeonPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));

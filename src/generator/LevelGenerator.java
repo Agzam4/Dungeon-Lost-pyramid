@@ -6,6 +6,8 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Random;
 
+import debug.Debug;
+
 public class LevelGenerator {
 
 	private long seed;
@@ -61,7 +63,9 @@ public class LevelGenerator {
 		System.out.println("[LevelGenerator] Secret Room...");
 		generateSecretRoom();
 		
-//		setSecretRoomAt(w/2+2, h/2 - 2);
+		if(Debug.isSecretRoomTesting) setSecretRoomAt(w/2+2, h/2 - 2, true);
+		
+		MinimapGenerator.generate(map);
 		// TODO: fix ladders
 	}
 	
