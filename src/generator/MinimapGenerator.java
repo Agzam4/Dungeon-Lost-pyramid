@@ -110,11 +110,14 @@ public class MinimapGenerator {
 		cut(minimap);
 		effectTo(minimap, createEffectMap(minimap.getWidth(), minimap.getHeight()));
 		
-//		try {
-//			ImageIO.write(minimap, "png", new File("debug/minimap.png"));
-//		} catch (IOException e) {
-//			e.printStackTrace();
-//		}
+		// TODO 
+		
+		try {
+			ImageIO.write(minimap, "png", new File("debug/minimap.png"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
 		return minimap;
 	}
 	
@@ -415,16 +418,16 @@ public class MinimapGenerator {
 //		}
 	}
 	
-//	public static void main(String[] args) {
-//		LevelGenerator generator = new LevelGenerator();
-//		generator.setLevel(1);
-//		generator.generate(26, 26);
-////		try {
-////			ImageIO.write(generator.draw(), "png", new File("debug/map.png"));
-////		} catch (IOException e) {
-////			e.printStackTrace();
-////		}
-//	}
+	public static void main(String[] args) {
+		LevelGenerator generator = new LevelGenerator();
+		generator.setLevel(1);
+		generator.generate(30, 30);
+//		try {
+//			ImageIO.write(generator.draw(), "png", new File("debug/map.png"));
+//		} catch (IOException e) {
+//			e.printStackTrace();
+//		}
+	}
 	
 	private static int randomInt(int i) {
 		return (int) (Math.random()*i);

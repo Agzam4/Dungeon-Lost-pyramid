@@ -1,49 +1,52 @@
-package game;
+package entities;
 
 import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 
-import debug.Debug;
-import generator.Blocks;
+import game.Box;
+import game.GameObject;
+import game.Tile;
 import stages.SGame;
 
-public class Player extends GameObject {
-	
-	public double speed = 8;
-	public double slow = 2D; // 0.5D
+public abstract class Entity extends GameObject {
 
-	public static final int g = Tile.tilesize/17;
-	public static final int jumpPower = (int) Math.sqrt(2*g*Tile.tilesize*3); // v = sqrt(2gh)
-	
-	SGame game;
+	protected double speed = 8D;
+	protected double slow = 2D;
+	protected double g = Tile.tilesize/17d;
+	protected double jumpPower = Math.sqrt(2*g*Tile.tilesize*3);
 
-	Box hitbox;
-	Box groundBox;
+	protected Box hitbox;
 	
-	public Player(SGame game) {
-		this.game = game;
+	protected BufferedImage img = null;
+	
+	public Entity(SGame game) {
 		hitbox = new Box(0, 0, 20, 20);
-		groundBox = new Box(0, 0, 20, 40);
+		setGame(game);
+		setManager(game.getManager());
 	}
-	
-	/**
-	 * Center X & Y
-	 */
-	int cx, cy;
-	
-	int HP = Debug.isMorePlayerHP ? Integer.MAX_VALUE : 0; // FIXME
 
-	boolean isGrounded;
+	protected abstract void ai();
+	protected abstract BufferedImage image();
 	
-	boolean isTouchTrap;
+	
+
+	protected int HP = 1;
+	private boolean isAlive = true;
+	
+	protected int cx, cy;
+	protected double vx, vy;
 
 	private double effect = 0;
-	private double effectMove = 0;
-	
-	private boolean isRight = false;
+	protected double effectMove = 0;
+	private boolean isTouchTrap;
+
+	protected boolean isLocked = false;
+	protected boolean isTouchable = true;
+
+	protected boolean isGrounded;
 	
 	@Override
 	public void update() {
-		
 		cx = (int) (hitbox.w/2d*getGame().getQuality());
 		cy = (int) (hitbox.h/2d*getGame().getQuality());
 
@@ -53,52 +56,19 @@ public class Player extends GameObject {
 		
 		double eff = 0;
 		
-		if(isRIGHT) {
-			if(!isRight || Math.round(vx) == 0)
-			effectMove=speed;
-			vx=speed;
-			isRight = true;
-		}
-		if(isLEFT) {
-			if(isRight || Math.round(vx) == 0)
-			effectMove=speed;
-			vx=-speed;
-			isRight = false;
-		}
-		
-		if(isLadder) {
-			if(isUP) vy=-speed;
-			if(isDOWN) vy=speed;
-		}else {
-			if(isUP && isGrounded) vy=-jumpPower;
-		}
+		ai();
 		
 		isTouchTrap = isTrap();
 		if(isTouchTrap) {
-			int id = getTrapID();
-			if(id != -1) {
-				if(id == Blocks.FINISH.ordinal()) {
-					getGame().nextDungeon();
-				}else {
-					if(HP > 0) {
-						HP--;
-						destroyTraps();
-					}else {
-						if (id == Blocks.SPIKES.ordinal()) {
-							getGame().gameOver("spikes", true);
-						}else if (id == Blocks.CRUSHER_AIR.ordinal()) {
-							getGame().gameOver("crusher", true);
-						}else if (id == Blocks.SAND.ordinal()) {
-							getGame().gameOver("quicksand", false);
-						}else if (id == Blocks.LADDER_TRAP_LADDER.ordinal()) {
-							getGame().gameOver("crusher", true);
-						}
-						return;
-					}
-				}
+			HP--;
+			if(HP < 1) {
+				isAlive = false;
 			}
 		}
-
+		if(isLocked) {
+			vx = 0;
+			vy = 0;
+		}
 		x += vx;
 		updatePosition();
 		int intersectionX = getIntersectionX(Tile.HITBOX_WALL);
@@ -107,13 +77,6 @@ public class Player extends GameObject {
 			vx = 0;
 			effectMove = 0;
 		}
-
-//		y += vy;
-//		updatePosition();
-//		if(isWall(Tile.HITBOX_WALL)) {
-//			y += getIntersectionY(Tile.HITBOX_WALL);
-//			vy = 0;
-//		}
 
 		isGrounded = false;
 		if(vy > 0) {
@@ -124,6 +87,19 @@ public class Player extends GameObject {
 					y+=vectorY%getHeight();
 				}
 				updatePosition();
+				if(isTouchable) {
+					int intersectionPlayerY = getPlayerIntersectionY(Tile.HITBOX_WALL);
+					if(intersectionPlayerY != 0) {
+						y += intersectionPlayerY;
+						if(vy > g) {
+							effect = -vy/20;
+						}
+						vy = 0;
+						isGrounded = true;
+						break;
+					}
+				}
+				
 				int intersectionY = getIntersectionY(Tile.HITBOX_WALL);
 				if(intersectionY != 0) {
 					y += intersectionY;
@@ -188,10 +164,6 @@ public class Player extends GameObject {
 		}
 		
 		effect = (effect-eff)/2+eff;
-		
-//		int eSize = (int) (20*eff/2);
-//		hitbox.w = 20 - eSize;
-		//hitbox.h = 10 + eSize;
 	}
 	
 	public void destroyTraps() {
@@ -205,13 +177,6 @@ public class Player extends GameObject {
 		getGame().destroyTrap(right, top);
 		getGame().destroyTrap(right, bottom);
 	}
-
-	private int getTrapID() {
-		Tile tile = getTrap();
-		if(tile == null) return -1;
-		return tile.getType();
-	}
-	
 
 	private void updateTouch() {
 		Tile tile = getTouch();
@@ -235,24 +200,6 @@ public class Player extends GameObject {
 		if(checkTouch(right, bottom)) return getGame().getTile(right, bottom);
 		
 		return null;
-	}
-	
-	private Tile getTrap() {
-		int left = (int)((x)/Tile.tilesize);
-		int right = (int)((x+hitbox.w)/Tile.tilesize);
-		int top = (int)((y)/Tile.tilesize);
-		int bottom = (int)((y+hitbox.h)/Tile.tilesize);
-
-		if(checkTrap(left, top)) return getGame().getTile(left, top);
-		if(checkTrap(left, bottom)) return getGame().getTile(left, bottom);
-		if(checkTrap(right, top)) return getGame().getTile(right, top);
-		if(checkTrap(right, bottom)) return getGame().getTile(right, bottom);
-		
-		return null;
-	}
-	
-	private boolean checkTrap(int tx, int ty) {
-		return getGame().getHitbox(tx, ty, Tile.HITBOX_REDZONE).intersects((int)x,(int)y);
 	}
 
 	private boolean isLadder() {
@@ -308,14 +255,27 @@ public class Player extends GameObject {
 		}
 		return sum;
 	}
+	
+	private int getPlayerIntersectionY(int hbType) {
+		int left = (int)((x)/Tile.tilesize);
+		int right = (int)((x+getWidth())/Tile.tilesize);
+		int top = (int)((y)/Tile.tilesize);
+		int bottom = (int)((y+getHeight())/Tile.tilesize);
+		
+		int sum = 0;
+
+		if(vy > 0) {
+			int iBottom = getHitbox().getIntersectionBottom(getGame().getPlayer().getHitbox());
+			if(iBottom > 6) {
+				if(iBottom > 0) sum -= iBottom;
+			}
+		}
+		return sum;
+	}
 
 	private void updatePosition() {
 		hitbox.setPosition((int)x, (int)y);
 	}
-	
-//	private boolean isWall(int hbType) {
-//		return checkTiles(hitbox, hbType, x, y);
-//	}
 	
 	private boolean checkTiles(Box box, int hbType, double x, double y) {
 		int left = (int)((x)/Tile.tilesize);
@@ -328,58 +288,32 @@ public class Player extends GameObject {
 				||  getGame().getHitbox(right, top, hbType)		.intersects((int)(x+box.w), (int)y)
 				||  getGame().getHitbox(right, bottom, hbType)	.intersects((int)(x+box.w), (int)(y+box.h))
 			   /**/;
-				
-//		return /**/	getGame().getHitbox(left, top, hbType).intersects(box) 
-//				|| 	getGame().getHitbox(left, bottom, hbType).intersects(box) 
-//				|| 	getGame().getHitbox(right, top, hbType).intersects(box)
-//				|| 	getGame().getHitbox(right, bottom, hbType).intersects(box)
-//			   /**/;
 	}
 	
 	public boolean checkTile(Box box) {
 		return box.intersects(hitbox);
 	}
 	
-	double vx, vy;
-
 	@Override
 	public void draw(Graphics2D g, Graphics2D fg) {
-		int q = (int) getGame().getQuality();
-//		int nx = (int) (x-getGame().mapX -Tile.tilesize + cx);
-//		int ny = (int) (y-getGame().mapY -Tile.tilesize + cy);
-		int nx = (int) ((x-getGame().mapX + getGame().getGameWidth()/q/2)*q - cx
-				- getGame().getQsMapX());
-		int ny = (int) (y-getGame().mapY + getGame().getGameHeight()/2  - cy
-				- getGame().getQsMapY());
-		int nd = (int) (hitbox.w*getGame().getQuality());
-//		
-//		g.setColor(isTouchTrap ? Color.RED.darker() : Color.LIGHT_GRAY);
-//		g.drawRect(nx, ny, nd, nd);
-		
-		
-		int eff = (int) (effect*nd/2);
-		g.drawImage(getGame().getPack().player, nx + eff/2, ny - eff, nd - eff, nd + eff, null);
-	}
+		if(img != null) {
+			int q = (int) getGame().getQuality();
+			int nx = (int) ((x - getGame().mapX%(getGame().getWidth()*Tile.tilesize)-10)*getGame().getQuality() + getGame().getGameWidth()/2);
+			int ny = (int) ((y - getGame().mapY%(getGame().getHeight()*Tile.tilesize)-10)*getGame().getQuality() + getGame().getGameHeight()/2);
 
-	
-	
-	boolean isUP;
-	boolean isDOWN;
+//			int nx = (int) ((x-getGame().mapX + getGame().getGameWidth()/q/2)*q - cx
+//					- getGame().getQsMapX());
+//			int ny = (int) (y-getGame().mapY + getGame().getGameHeight()/2  - cy
+//					- getGame().getQsMapY());
 
-	boolean isRIGHT;
-	boolean isLEFT;
-	
-	public void up(boolean b) {
-		isUP = b;
-	}
-	public void down(boolean b) {
-		isDOWN = b;
-	}
-	public void right(boolean b) {
-		isRIGHT = b;
-	}
-	public void left(boolean b) {
-		isLEFT = b;
+			int nw = (int) (hitbox.w*getGame().getQuality());
+			int nh = (int) (hitbox.h*getGame().getQuality());
+			
+			int eff = (int) (effect*nw/2);
+			g.drawImage(img, nx + eff/2, ny - eff, nw - eff, nh + eff, null);
+		}else {
+			img = image();
+		}
 	}
 
 	public int getWidth() {
@@ -390,15 +324,22 @@ public class Player extends GameObject {
 		return hitbox.h;
 	}
 	
+	public boolean isAlive() {
+		return isAlive;
+	}
+	
+	protected double getDistanceToPlayer() {
+		return Math.hypot(
+				x - getGame().mapX%(getGame().getTWidth()),
+				y - getGame().mapY%(getGame().getTHeight())
+				);
+	}
+	
 	public Box getHitbox() {
 		return new Box(
 				(int)(x%getGame().getTWidth() + getGame().getTWidth())%getGame().getTWidth(),
 				(int)(y%getGame().getTHeight() + getGame().getTHeight())%getGame().getTHeight(),
 				hitbox.w,
 				hitbox.h);
-	}
-
-	public void setVx(double vx) {
-		this.vx = vx;
 	}
 }

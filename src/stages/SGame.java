@@ -10,12 +10,20 @@ import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 
 import javax.imageio.ImageIO;
+import javax.swing.plaf.basic.BasicInternalFrameTitlePane.MaximizeAction;
 
 import debug.Debug;
+import entities.Blue;
+import entities.Chest;
+import entities.Entity;
 import game.Box;
+import game.DarkEffect;
+import game.DrawEffects;
 import game.LightComposite;
+import game.Particle;
 import game.Player;
 import game.Tile;
 import gameGUI.Button;
@@ -23,7 +31,9 @@ import gameGUI.ImageButton;
 import generator.Blocks;
 import generator.LevelGenerator;
 import generator.MinimapGenerator;
+import progress.ProgressData;
 import work.Data;
+import work.LevelLoader;
 import work.Pack;
 
 public class SGame extends Stage {
@@ -32,7 +42,7 @@ public class SGame extends Stage {
 	 * DEBUG
 	 */
 	
-	boolean hitboxMode = false;
+	boolean hitboxMode = Debug.isHitboxMode;
 	
 	int map[][];
 	Tile[][] tiles;
@@ -56,6 +66,14 @@ public class SGame extends Stage {
 	
 	ImageButton minimapButton;
 
+	private int slowTime;
+	private double slowTimeProgress;
+	private boolean isSlowTimeUsed = false;
+	
+	private DrawEffects effects;
+	
+	ArrayList<Entity> entities = new ArrayList<Entity>();
+
 	public SGame() {
 
 		gameOverMenu = new Button("Menu");
@@ -63,8 +81,7 @@ public class SGame extends Stage {
 		gameOverMenu.hide();
 		gameOverNext.hide();
 		
-		
-		dungeonLevel = Debug.isSecretRoomTesting ? 3 : 0;
+		dungeonLevel = (Debug.isSecretRoomTesting ? 3 : 0) + Debug.skipLevels;
 		gameOver = null;
 		
 		player = new Player(this);
@@ -75,6 +92,8 @@ public class SGame extends Stage {
 		
 		blackScreenAlpha = -1;
 		effectBlackScreenAlpha = -1;
+		
+		effects = new DrawEffects(this);
 	}
 	
 	BufferedImage minimap = null;
@@ -82,10 +101,36 @@ public class SGame extends Stage {
 	double minimapSize = 0;
 	double minimapDark = 0;
 	
+	public int getDungeonLevel() {
+		return dungeonLevel+1;
+	}
+	
+	private Blue blue;
+	
 	private void generate() {
 		LevelGenerator generator = new LevelGenerator();
 		generator.setLevel(dungeonLevel);
-		generator.generate(25 + dungeonLevel, 25 + dungeonLevel);
+		
+		entities = new ArrayList<Entity>();
+
+		System.out.println("[SGame] Level: " + getDungeonLevel());
+		if(getDungeonLevel() == 10) {
+			try {
+				generator.setMap(LevelLoader.loadLevel(getDungeonLevel()), LevelLoader.lastW, LevelLoader.lastH);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			Chest chest = new Chest(this);
+			chest.setPosition(46*Tile.tilesize+2, 33*Tile.tilesize+8);
+			entities.add(chest);
+			
+			blue = new Blue(this);
+			blue.setPosition(35*Tile.tilesize+2, 48*Tile.tilesize+8);
+			entities.add(blue);
+		}else {
+			generator.generate(25 + dungeonLevel, 25 + dungeonLevel);
+		}
+		
 		
 		minimap = MinimapGenerator.generate(generator.getMap());
 		
@@ -120,6 +165,12 @@ public class SGame extends Stage {
 		player.setPosition(
 				mapCenterX - player.getHeight()/2,
 				mapCenterY - Tile.tilesize/2 - player.getHeight());
+
+		if(getDungeonLevel() == 10) {
+			tiles[31][34].setAction(Tile.ACTION_CLOSE);
+			tiles[37][34].setAction(Tile.ACTION_CLOSE);
+			tiles[31][48].setAction(Tile.ACTION_CLOSE);
+		}
 		
 		dungeonTitleTime = 1500;
 		isSecretRoomOpened = Debug.isSecretRoomTesting;
@@ -130,9 +181,20 @@ public class SGame extends Stage {
 		
 		dungeonLevel++;
 		needNextDungeon = false;
+		
+		slowTime = 0;
+		slowTimeProgress = 0;
+		isSlowTimeUsed = false;
+		
+		particles = new ArrayList<Particle>();
+		
+		levelEventID = 0;
 	}
 
 	int timer = 0;
+	int levelEventID = 0;
+	
+	private ArrayList<Particle> particles;
 	
 	@Override
 	public void update() {
@@ -155,6 +217,40 @@ public class SGame extends Stage {
 			}
 		}else {
 			blackScreenAlpha *= 0.8;
+		}
+		
+		if(getDungeonLevel() == 11) {
+//			System.out.println(mapX + " " + mapY + "\t" + timer);
+			if(mapX > 3950 && levelEventID == 0) {
+				tiles[31][34].setAction(Tile.ACTION_OPEN);
+				tiles[37][34].setAction(Tile.ACTION_OPEN);
+				levelEventID = 1;
+				lightRadius = (float) (2f - (mapY-3820)/2560f);
+			}
+			if(mapX < 3600 && levelEventID == 2) {
+				for (int i = 0; i < 5; i++) {
+					for (int y = 0; y < 10; y++) {
+						tiles[32+i][35+y].drak();
+//						setBlock(Blocks.AIR.ordinal(), 32+i, 35+y);
+					}
+				}
+				tiles[31][34].setAction(Tile.ACTION_CLOSE);
+				tiles[37][34].setAction(Tile.ACTION_CLOSE);
+			}
+			if(mapX < 3560 && mapY > 4000 && levelEventID == 4) {
+				blue.level10$jumpOnPlayer();
+				levelEventID = 3;
+			}
+			if(levelEventID == 5) {
+				tiles[31][48].setAction(Tile.ACTION_OPEN);
+				levelEventID = 6;
+			}
+			if(levelEventID == 9) {
+				if(isDialogEnd()) nextDungeon();
+			}
+			if(mapY > 3820) {
+				lightRadius = Math.max(1, (float) (2f - (mapY-3820)/128f));
+			}
 		}
 		
 		if(isGameOver()) {
@@ -187,16 +283,34 @@ public class SGame extends Stage {
 		if(player.getY() < mapCenterY) {
 			player.setY(player.getY() + mapTilesHeight);
 		}
-
+		
 		for (int x = 0; x < map.length; x++) {
 			for (int y = 0; y < map[x].length; y++) {
-				tiles[x][y].update();
+				tiles[x][y].update(slowTime > 0 ? 1d/ProgressData.slowTimeK: 1);
 			}
 		}
 		
 		if(isSecretChestLooted) {
 			effectLight = (effectLight-0.6f)/1.5f + 0.6f;
 			effectBlackScreenAlpha = 255*Math.cos(timer/20d);
+		}
+		
+		if(slowTime > 0) {
+			slowTime--;
+			getPanel().setGameEffect(DarkEffect.INSTANCE);
+		}else {
+			getPanel().setGameEffect(null);
+		}
+		
+		for (int i = 0; i < particles.size(); i++) {
+			particles.get(i).update();
+		}
+		
+		for (int i = 0; i < entities.size(); i++) {
+			entities.get(i).update();
+			if(!entities.get(i).isAlive()) {
+				entities.remove(i);
+			}
 		}
 	}
 
@@ -331,10 +445,22 @@ public class SGame extends Stage {
 		
 		mapX = (mapX - player.getX()) * 0.0 + player.getX() + sMapX;
 		mapY = (mapY - player.getY()) * 0.0 + player.getY() + sMapY;
-		
+
 		g.setColor(new Color(52, 48, 26));
+//		g.setColor(new Color(88, 82, 44));
+//		g.setColor(new Color(0, 0, 0));
 		g.fillRect(0, 0, getGameWidth(), getGameHeight());
-		
+
+		slowTimeProgress = (slowTimeProgress-slowTime)/2+slowTime;
+		if(slowTimeProgress > 0) {
+//			System.out.println("[SGame] " + slowTimeProgress);
+			fg.setColor(new Color(6,198,104));
+			fg.fillRect(
+					getFrameH()/50,
+					getFrameH()/50,
+					(int) (getGameWidth()*slowTimeProgress/5/getData().getSlowTime()),
+					getFrameH()/28);
+		}
 //		g.translate(getGameWidth()/2, getGameHeight()/2);
 
 		/*
@@ -372,6 +498,7 @@ public class SGame extends Stage {
 			}
 		}*/
 
+		effects.drawBackgroundEffects(g, getDungeonLevel());
 
 		boolean needFire = false;
 		/*/ - Draw Tiles - /*/
@@ -456,32 +583,43 @@ public class SGame extends Stage {
 				}else {
 					if(tile.isSecretRoomBlock() && !isSecretRoomOpened()) {
 						drawImage(g, drawbox, Blocks.WALL.ordinal(), px, py, 0, 0);
-					}else if(tile.isFire()) {
+					}else if(tile.isSecretFire()) {
 						drawImage(g, drawbox, Blocks.SECRET_AIR.ordinal(), px, py, 0, 0);
 						needFire = true;
+					}else if(tile.isFire()) {
+						drawImage(g, drawbox, Blocks.AIR.ordinal(), px, py, 0, 0);
+						needFire = true;
 					}else if(tile.isSand()) {
-						drawImage(g, drawbox, type, px, py, 0, tile.getTrapRedzoneInt());
+						drawImage(g, drawbox, type, px, py, 0, tile.getTrapRedzone());
 						drawImage(g, drawbox, Blocks.SAND_HEAD.ordinal(),
-								px, py, 0, tile.getTrapRedzoneInt()-Tile.tilesize);
+								px, py, 0, tile.getTrapRedzone()-Tile.tilesize);
 						drawImage(g, drawbox, Blocks.SAND_DOWN.ordinal(),
 								px, py, 0, 0);
 					}else if (tile.isCrusherAir()) {
-						drawImage(g, drawbox, type, px, py, 0, -Tile.tilesize+tile.getTrapRedzoneInt());
+						drawImage(g, drawbox, type, px, py, 0, -Tile.tilesize+tile.getTrapRedzone());
 						drawImage(g, drawbox, Blocks.WALL.ordinal(), px, py, 0, -Tile.tilesize);
 					}else if (tile.isLadderTrapLeft()) {
 						drawImage(g, drawbox, Blocks.LADDER.ordinal(), px, py, Tile.tilesize, 0);
-						drawImage(g, drawbox, Blocks.LADDER_TRAP_LADDER.ordinal(), px, py, tile.getTrapRedzoneInt()/2, 0);
+						drawImage(g, drawbox, Blocks.LADDER_TRAP_LADDER.ordinal(), px, py, tile.getTrapRedzone()/2, 0);
 						drawImage(g, drawbox, Blocks.LADDER_TRAP_LEFT.ordinal(), px, py, 0, 0);
 					}else if (tile.isLadderTrap()) {
 					}else if (tile.isLadderTrapRight()) {
 						g.drawImage(getPack().getTile(Blocks.LADDER_TRAP_LADDER.ordinal()),
-							(int)((drawbox.x-tile.getTrapRedzoneInt()/2+Tile.tilesize)*getQuality() + px),
+							(int)((drawbox.x-tile.getTrapRedzone()/2+Tile.tilesize)*getQuality() + px),
 							(int)(drawbox.y*getQuality() + py),
 							(int)(-drawbox.w*getQuality()),
 							(int)(drawbox.h*getQuality()), null);
 						drawImage(g, drawbox, Blocks.LADDER_TRAP_RIGHT.ordinal(), px, py, 0, 0);
 					}else {
 						drawImage(g, drawbox, type, px, py, 0, 0);
+					}
+					
+					if(tile.isDarked()) {
+						g.setColor(new Color(0,0,0,200));
+						g.fillRect(px,py,
+								(int)(Tile.tilesize*getQuality()),
+								(int)(Tile.tilesize*getQuality())
+								);
 					}
 //					g.drawImage(pack.getTile(type), (int)(drawbox.x*getQuality() + px),
 //							(int)(drawbox.y*getQuality() + py),
@@ -515,8 +653,20 @@ public class SGame extends Stage {
 				}
 			}
 		}
+
+		for (int i = 0; i < entities.size(); i++) {
+			entities.get(i).draw(g, fg);
+		}
 		
 		player.draw(g, fg);
+
+		
+		effects.drawEffects(g, getDungeonLevel());
+		
+		for (int i = 0; i < particles.size(); i++) {
+			particles.get(i).setCam(mapX%(width*Tile.tilesize), mapY%(height*Tile.tilesize));
+			particles.get(i).draw(g, fg);
+		}
 
 		if(needFire) {
 			for (int y = (int) (-mapY%Tile.tilesize); y < getPanel().getGameHeight()/getPanel().quality+Tile.tilesize; y+=Tile.tilesize) {
@@ -533,7 +683,7 @@ public class SGame extends Stage {
 					Tile tile = tiles[bx][by];
 
 					int type = map[bx][by];
-					if(tile.isFire() && !isSecretChestLooted()) {
+					if((tile.isSecretFire() && !isSecretChestLooted()) || tile.isFire()) {
 						Composite composite = g.getComposite();
 						g.setComposite(LightComposite.INSTANCE);
 						int size = (int) (Tile.tilesize*getQuality());
@@ -572,13 +722,50 @@ public class SGame extends Stage {
 				}
 			}
 		}
-		
 
 		g.setPaint(getGradient());
 		g.fillRect(0, 0, getPanel().getGameWidth(), getPanel().getGameHeight());
+		
+		if(dialogText.size() > 0) {
+			fg.setColor(Color.WHITE);
+			fg.setFont(new Font(Font.DIALOG_INPUT, Font.BOLD, (int) (getQuality()*7)));
+			fg.drawString(
+					dialogAuthor,
+					(int) getQuality()*5, 
+					getFrameH()-(int) getQuality()*18);
+
+			fg.setFont(new Font(Font.DIALOG_INPUT, Font.BOLD, (int) (getQuality()*4)));
+			fg.setColor(new Color(200,200,200));
+			fg.drawString(
+					dialogText.get(0).substring(0, dialogVisibleText),
+					(int) getQuality()*5, 
+					getFrameH()-(int) getQuality()*10);
+
+			fg.setColor(new Color(0,0,0,200));
+			fg.fillRect(
+					(int) getQuality()*2,
+					getFrameH()-(int) getQuality()*25,
+					getFrameW()-(int) getQuality()*4,
+					(int) getQuality()*20
+					);
+
+			if(dialogText.size() > 0) {
+				if(dialogText.get(0).length() > dialogVisibleText) {
+					dialogVisibleText+=Math.max(1, dialogText.get(0).length()/10d);
+					if(dialogVisibleText > dialogText.get(0).length()) {
+						dialogVisibleText = dialogText.get(0).length();
+					}
+				}
+			}
+		}
 //		mapX += 5.0;
 //		mapY += 0.5;
 	}
+
+	private String dialogAuthor = "";
+	private ArrayList<String> dialogText = new ArrayList<String>();
+	private int dialogVisibleText = 0;
+	
 	
 	
 	public RadialGradientPaint getFireRadialGradient(int x, int y, double r) {
@@ -608,7 +795,7 @@ public class SGame extends Stage {
 	}
 	
 	
-	private void drawImage(Graphics2D g, Box drawbox, int type, int px, int py, int x, int y) {
+	private void drawImage(Graphics2D g, Box drawbox, int type, int px, int py, double x, double y) {
 		g.drawImage(getPack().getTile(type),
 				(int)((drawbox.x+x)*getQuality() + px),
 				(int)((drawbox.y+y)*getQuality() + py),
@@ -621,14 +808,41 @@ public class SGame extends Stage {
 
 	@Override
 	public void keyPressed(KeyEvent e) {
-		setKeys(e.getKeyCode(), true);
+		if(isDialogEnd()) {
+			setKeys(e.getKeyCode(), true);
 
-		if(isReloadMiniMapKey) {
-			if(e.getKeyCode() == Data.control[Data.KEY_MAP]) {
-				isMinimpOpen = !isMinimpOpen;
-				isReloadMiniMapKey = false;
+			if(isReloadMiniMapKey) {
+				if(e.getKeyCode() == Data.control[Data.KEY_MAP]) {
+					isMinimpOpen = !isMinimpOpen;
+					isReloadMiniMapKey = false;
+				}
 			}
 		}
+		
+
+//		if(e.getKeyCode() == Data.control[Data.KEY_SLOWTIME] && !isSlowTimeUsed) {
+//			slowTime = getData().getSlowTime();
+//			isSlowTimeUsed = false;
+//		}
+		
+		if(e.getKeyCode() == KeyEvent.VK_SPACE ||
+				e.getKeyCode() == KeyEvent.VK_ENTER) {
+			if(dialogText.size() > 0) {
+				dialogText.remove(0);
+				dialogVisibleText = 0;
+			}
+		}
+	}
+	
+	private void createParticle(int type, double rotate, double vx, double vy, double x, double y) {
+		Particle particle = new Particle(
+				type, getManager(),
+				rotate,
+				vx, vy,
+				x - 10, y - 10
+				);
+		particle.setGame(this);
+		particles.add(particle);
 	}
 
 	@Override
@@ -648,8 +862,6 @@ public class SGame extends Stage {
 			player.right(b);
 		if(key == Data.control[Data.KEY_LEFT])
 			player.left(b);
-//		if(key == Data.control[Data.KEY_LEAP])
-//			player.leap(b);
 	}
 
 	int debug$tileX, debug$tileY;
@@ -691,6 +903,7 @@ public class SGame extends Stage {
 		x = x%width;
 		y = y%height;
 		if(tiles[x][y].isTrap()) {
+			int type = tiles[x][y].getType();
 			if(tiles[x][y].isLadderTrap()) {
 				map[x][y] = Blocks.LADDER.ordinal();
 				setBlock(Blocks.WALL.ordinal(), x+1, y);
@@ -701,6 +914,43 @@ public class SGame extends Stage {
 			tiles[x][y] = new Tile(map[x][y]);
 			tiles[x][y].setPosition((x)*Tile.tilesize, (y)*Tile.tilesize);
 			tiles[x][y].setGame(this);
+			
+			if(type == Blocks.CRUSHER_AIR.ordinal()) {
+				for (int i = 0; i < 3; i++) {
+					createParticle(
+						Particle.PARTICLE_CRUSHER,
+						0d,
+						Math.random()*2d-1d, -5d,
+						(x)*Tile.tilesize + i*11 + 2, (y)*Tile.tilesize
+					);
+				}
+			}else if(type == Blocks.LADDER_TRAP_LADDER.ordinal()) {
+				for (int i = 0; i < 3; i++) {
+					createParticle(
+							Particle.PARTICLE_CRUSHER,
+							Math.toRadians(90),
+							Math.random()*2d, -5d,
+							(x)*Tile.tilesize + Tile.tilesize - 2,
+							(y)*Tile.tilesize + i*11 - Tile.tilesize/2 + 5
+						);
+					createParticle(
+							Particle.PARTICLE_CRUSHER,
+							Math.toRadians(-90),
+							Math.random()*2d-1d, -5d,
+							(x)*Tile.tilesize - 2,
+							(y)*Tile.tilesize + i*11 - Tile.tilesize/2 + 5
+						);
+				}
+			}else if(type == Blocks.SPIKES.ordinal()) {
+				for (int i = 0; i < 3; i++) {
+					createParticle(
+						Particle.PARTICLE_CRUSHER,
+						Math.toRadians(180),
+						Math.random()*2d - 1, Math.random()*-1,
+						(x)*Tile.tilesize + i*11 + 2, (y)*Tile.tilesize
+					);
+				}
+			}
 		}
 	}
 	
@@ -737,11 +987,16 @@ public class SGame extends Stage {
 	
 	private String gameOver;
 	
-	public void gameOver(String text) {
-		if(!isGameOver()) { //  !gameOver.equals(text)
-			dungeonTitleTime = 0;
-			gameOver = text;
-			blackScreenAlpha = 0;
+	public void gameOver(String text, boolean isDestroible) {
+		if(!isGameOver()) {
+			if(isSlowTime() && isDestroible) {
+				slowTime = 0;
+				player.destroyTraps();
+			}else {
+				dungeonTitleTime = 0;
+				gameOver = text;
+				blackScreenAlpha = 0;
+			}
 		}
 	}
 	
@@ -779,5 +1034,59 @@ public class SGame extends Stage {
 	
 	public double getQsMapY() {
 		return sMapY*getQuality();
+	}
+	
+	public boolean isSlowTime() {
+		return slowTime > 0;
+	}
+	
+	public int getWidth() {
+		return width;
+	}
+	
+	public int getHeight() {
+		return height;
+	}
+	
+	public int getTWidth() {
+		return width*Tile.tilesize;
+	}
+	
+	public int getTHeight() {
+		return height*Tile.tilesize;
+	}
+	
+	
+	public int getLevelEventID() {
+		return levelEventID;
+	}
+	
+	public void setLevelEventID(int levelEventID) {
+		this.levelEventID = levelEventID;
+	}
+	
+	public void nextLevelEvent() {
+		levelEventID++;
+	}
+	
+	public void addDialog(String dialogAuthor, String dialogTexts[]) {
+		this.dialogAuthor = dialogAuthor;
+		dialogVisibleText = 0;
+		for (int i = 0; i < dialogTexts.length; i++) {
+			dialogText.add(dialogTexts[i]);
+//			player.setVx(0);
+			player.left(false);
+			player.right(false);
+			player.up(false);
+			player.down(false);
+		}
+	}
+
+	public boolean isDialogEnd() {
+		return dialogText.size() == 0;
+	}
+	
+	public Player getPlayer() {
+		return player;
 	}
 }

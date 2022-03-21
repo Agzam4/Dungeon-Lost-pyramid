@@ -10,7 +10,7 @@ public class Data {
 	public static final int KEY_DOWN = 3;
 	public static final int KEY_RIGHT = 4;
 	
-	public static final int KEY_LEAP  = 5;
+	public static final int KEY_SLOWTIME = 5;
 
 	public static final int KEY_ESC = 6;
 	public static final int KEY_MAP = 7;

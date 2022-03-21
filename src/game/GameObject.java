@@ -8,7 +8,7 @@ import stages.SGame;
 
 public abstract class GameObject {
 
-	double x, y;
+	public double x, y;
 	
 	public abstract void update();
 	public abstract void draw(Graphics2D g, Graphics2D fg);

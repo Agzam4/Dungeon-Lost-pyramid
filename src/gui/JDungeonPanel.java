@@ -2,10 +2,12 @@ package gui;
 
 import javax.swing.JPanel;
 
+import game.DarkEffect;
 import game.Tile;
 
 import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.event.ComponentEvent;
@@ -66,15 +68,23 @@ public class JDungeonPanel extends JPanel implements KeyListener {
 		Thread update = new Thread(() -> {
 			long start;
 			long wait;
+			int waitLong = 0;
 			while (isRunning) {
 				start = System.nanoTime();
 				manager.update();
-				draw();
+				if(waitLong < sleep*1.25) {
+					draw();
+				}else {
+					waitLong -= sleep*1.25;
+				}
 				wait = sleep - (System.nanoTime() - start)/1_000_000;
-				if(wait < 0) wait = 5;
-				try {
-					Thread.sleep(wait);
-				} catch (InterruptedException e) {
+				if(wait > 5) {
+					try {
+						Thread.sleep(wait);
+					} catch (InterruptedException e) {
+					}
+				} else {
+					waitLong -= wait;
 				}
 			}
 		});
@@ -105,8 +115,11 @@ public class JDungeonPanel extends JPanel implements KeyListener {
 		manager.draw(g, gf);
 
 		Graphics2D a = (Graphics2D) all.getGraphics();
+		Composite defcomposite = a.getComposite();
+		if(gameEffect != null) a.setComposite(gameEffect);
 		a.drawImage(game, gameX, gameY,
 				(int)(game.getWidth()*scale), (int) (game.getHeight()*scale), null);
+		a.setComposite(defcomposite);
 		a.drawImage(gamefull, 0, 0, frameW, frameH, null);
 		a.dispose();
 		
@@ -205,4 +218,9 @@ public class JDungeonPanel extends JPanel implements KeyListener {
 		return scale;
 	}
 	
+	Composite gameEffect;
+	
+	public void setGameEffect(Composite gameEffect) {
+		this.gameEffect = gameEffect;
+	}
 }

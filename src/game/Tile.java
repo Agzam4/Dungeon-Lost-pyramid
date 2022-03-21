@@ -1,5 +1,7 @@
 package game;
 
+import java.io.Closeable;
+
 import generator.Blocks;
 import stages.SGame;
 
@@ -22,7 +24,7 @@ public class Tile {
 		STICK (new Box(tilesize/2 - tilesize/8, 0, tilesize/4, tilesize)),
 		SPIKES (new Box(0, 5, tilesize, tilesize-5)),
 		CRUSHER_AIR (new Box(0, 0, tilesize, 0)),
-		LADDER_TRAP (new Box(0, 0, tilesize, tilesize)),
+		LADDER_TRAP (new Box(0, 3, tilesize, tilesize-6)),
 		
 		// REDZONE
 		RCRUSHER_AIR (new Box(1, 0, tilesize-2, 0)),
@@ -48,6 +50,8 @@ public class Tile {
 	SGame game;
 	private Box hitbox, redzone, ladder, drawBox, touchzone;
 	private int type;
+	
+	private boolean isDarked;
 	
 	public Tile(int type) {
 		this.type = type;
@@ -85,6 +89,9 @@ public class Tile {
 		if(type == Blocks.SECRET_CARVED_BLOCK.ordinal()) hitbox = Hitboxes.BOX.getHitbox();
 		if(type == Blocks.SECRET_COLUMN_FIRE.ordinal()) hitbox = Hitboxes.AIR.getHitbox();
 		
+		if(type == Blocks.COLUMN.ordinal()) hitbox = Hitboxes.AIR.getHitbox();
+		if(type == Blocks.COLUMN_FIRE.ordinal()) hitbox = Hitboxes.AIR.getHitbox();
+		
 		redzone = Hitboxes.AIR.getHitbox();
 
 		if(type == Blocks.CRUSHER_AIR.ordinal()) redzone = Hitboxes.RCRUSHER_AIR.getHitbox();
@@ -114,7 +121,7 @@ public class Tile {
 		hitbox.setPosition(px, py);
 	}
 	
-	int trapTime = 0;
+	double trapTime = 0;
 	double trapRedzone = 0;
 
 	int sTouchTime = 0;
@@ -138,28 +145,65 @@ public class Tile {
 		}
 	}
 	
-	public void update() {
+	double vy = 0;
+	
+	private void open(double time) {
+		trapRedzone -= 2d + trapTime*3d;
+		if(trapRedzone > tilesize) {
+			trapRedzone = tilesize;
+		}
+		if(trapRedzone < 0) {
+			trapRedzone = 0;
+		}
+	}
+	
+	private void close(double time) {
+		vy+=time;
+		trapRedzone += 2d + /*(trapTime-20)*/vy*3d;
+		if(trapRedzone > tilesize) {
+			trapRedzone = tilesize;
+			vy /= isCrusherAir() ? -1.25d : -1.5d;
+		}
+		if(trapRedzone < 0) {
+			trapRedzone = 0;
+//			vy /= -2;
+		}
+		//trapRedzone = Math.pow(trapTime-35-25.1, 2)/21d;
+		//trapRedzone = (trapRedzone-Tile.tilesize)/2+Tile.tilesize;
+	}
+	
+	public void update(double time) {
 		if(game.isSecretRoomOpened()) {
 			if(isSecretAir() || isSecretDoor() || isSecretChest()) {
 				hitbox.w = 0;
 			}
 		}
 		if(isCrusherAir() || isLadderTrap() || isLadderTrapRight() || isLadderTrapLeft()) {
-			trapTime++;
-			if(trapTime > 50) {
-				
-				//////////////
-				 trapTime = 0;
-				//////////////
-				
-			}else if(trapTime < 15) {
-				trapRedzone *= 0.75;
-			}else if(trapTime < 35) {
-				trapRedzone = 0;
-			}else if(trapTime < 60) {
-				trapRedzone = (trapRedzone-Tile.tilesize)/2+Tile.tilesize;
-			}else if(trapTime < 50) {
-				trapRedzone = Tile.tilesize;
+			trapTime+=time;
+			if(action == ACTION_CLOSE) {
+				close(time);
+				trapTime = 50;
+			}else if(action == ACTION_OPEN) {
+				open(1);
+			}else if(action == ACTION_DEFAULT) {
+				if(trapTime >= 50) {
+					
+					//////////////
+					 trapTime = 0;
+					//////////////
+					 
+					 vy = 0;
+					
+				}else if(trapTime < 10) {
+					open(time);
+				}else if(trapTime < 20) {
+					trapRedzone = 0;
+					vy = 0;
+				}else if(trapTime < 40) {
+					close(time);
+				}else if(trapTime < 50) {
+					trapRedzone = Tile.tilesize;
+				}
 			}
 			if(isCrusherAir()) {
 				redzone.h = (int) trapRedzone;
@@ -167,6 +211,10 @@ public class Tile {
 			}
 			if(isLadderTrap()) {
 				redzone.w = (int) trapRedzone;
+				
+				hitbox.w = (int) trapRedzone;
+				hitbox.y = 2;
+				hitbox.h = tilesize-4;
 			}
 //			if(isLadderTrapLeft()) {
 //				drawBox.x = (int) trapRedzone/2;
@@ -175,11 +223,28 @@ public class Tile {
 //				drawBox.x = (int) trapRedzone/-2;
 //			}
 		}else if(isSand()) {
-			trapTime++;
-			trapRedzone = -(tilesize/5 + tilesize/5*Math.cos(trapTime/15d));
+			trapTime+=time;
+			trapRedzone = -(tilesize/5d + tilesize/5d*Math.cos(trapTime/15d));
 		}
 	}
 
+	public final static int ACTION_OPEN = -1;
+	public final static int ACTION_DEFAULT = 0;
+	public final static int ACTION_CLOSE = 1;
+	
+	private int action = ACTION_DEFAULT;
+
+	public void setAction(int action) {
+		this.action = action;
+		if(ACTION_OPEN == action) {
+			trapTime = 0;
+		}
+	}
+	
+	public int getAction() {
+		return action;
+	}
+	
 	public boolean isSecretRoomBlock() {
 		return isSecretDoor() || isSecretAir() || isSecretChest() 
 				|| isSecretColumn() || isSecretCarvedBlock() || isSecretColumnFire();
@@ -203,8 +268,10 @@ public class Tile {
 	public boolean isSecretCarvedBlock() {
 		return type == Blocks.SECRET_CARVED_BLOCK.ordinal();
 	}
-	
 	public boolean isFire() {
+		return type == Blocks.COLUMN_FIRE.ordinal(); // || ...
+	}
+	public boolean isSecretFire() {
 		return isSecretColumnFire(); // || ...
 	}
 	
@@ -231,8 +298,12 @@ public class Tile {
 		return (int) trapRedzone;
 	}
 	
+	public double getTrapRedzone() {
+		return trapRedzone;
+	}
+	
 	public Box getHitbox() {
-		return hitbox;
+		return isDarked ? Hitboxes.AIR.getHitbox() : hitbox;
 	}
 	
 	public Box getRedzone() {
@@ -257,5 +328,13 @@ public class Tile {
 
 	public boolean isTrap() {
 		return isCrusherAir() || isLadderTrap() || isSpikes();
+	}
+	
+	public void drak() {
+		isDarked = true;
+	}
+	
+	public boolean isDarked() {
+		return isDarked;
 	}
 }

@@ -36,8 +36,11 @@ public class Pack {
 	private BufferedImage[] coins;
 	private BufferedImage[] itemsFrames;
 	
-	
-	
+
+	private BufferedImage[] particlesCrusher;
+
+	private BufferedImage entityChest;
+	private BufferedImage entityBlue;
 	
 	public void load() throws IOException {
 		player = loadImage("/tileset/player.png");
@@ -53,10 +56,38 @@ public class Pack {
 		loadItemsFramesTileset(loadImage("/tileset/itemsFrames.png"));
 		System.out.println("[Pack] Loaded Frames (length: " + itemsFrames.length + ")");
 		
+		// Entity
+		
+		entityChest = loadImage("/tileset/entities/chest.png");
+		entityBlue = loadImage("/tileset/entities/blue.png");
+		
+		// Particles
+
+		particlesCrusher = loadParticles("/obj/particles_crusher.png", 4);
+		System.out.println("[Pack] Loaded particles");
 	}
 
 	private BufferedImage loadImage(String path) throws IOException {
 		return ImageIO.read(Pack.class.getResourceAsStream(path));
+	}
+	
+	private BufferedImage[] loadParticles(String path, int count) {
+		try {
+			BufferedImage particlesImage = loadImage(path);
+			BufferedImage[] particles = new BufferedImage[count];
+			int size = particlesImage.getWidth()/count;
+			for (int i = 0; i < particles.length; i++) {
+				particles[i] = particlesImage.getSubimage(i*size, 0, size, particlesImage.getHeight());
+			}
+			return particles;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+	
+	public BufferedImage[] getParticlesCrusher() {
+		return particlesCrusher;
 	}
 	
 	public void loadGameTileset(BufferedImage image) {
@@ -180,5 +211,13 @@ public class Pack {
 	
 	public Color getItemsColor(int id) {
 		return itemsColors[id];
+	}
+
+	public BufferedImage getEntityChest() {
+		return entityChest;
+	}
+
+	public BufferedImage getEntityBlue() {
+		return entityBlue;
 	}
 }

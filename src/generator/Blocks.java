@@ -44,6 +44,9 @@ public enum Blocks {
 	SECRET_COLUMN,
 	SECRET_CARVED_BLOCK,
 	SECRET_COLUMN_FIRE,
+	
+	COLUMN,
+	COLUMN_FIRE,
 	;
 
 	String name;

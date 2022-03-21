@@ -6,6 +6,8 @@ import game.SecretItem;
 
 public class ProgressData {
 
+	public static final int slowTimeK = 10;
+	
 	private SecretItem secretItem;
 	private long[] coins = new long[] {0l, 0l, 0l};
 	
@@ -193,5 +195,9 @@ public class ProgressData {
 	
 	public int getSelectedITEM_ID() {
 		return selectedITEM_ID;
+	}
+
+	public int getSlowTime() { // FIXME
+		return 500;
 	}
 }

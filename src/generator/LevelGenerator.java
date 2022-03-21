@@ -711,4 +711,10 @@ public class LevelGenerator {
 	public void setLevel(int dungeonLevel) {
 		this.dungeonLevel = dungeonLevel;
 	}
+	
+	public void setMap(int[][] map, int w, int h) {
+		this.map = map;
+		this.w = w;
+		this.h = h;
+	}
 }
